@@ -1,0 +1,134 @@
+# loggerkit (@mohamedhabibwork/loggerkit)
+
+> Provider-first, runtime-portable TypeScript logging: a small core (levels, structured entries,
+> sinks, formatters), pluggable transports, a pino-compatible facade, and adapters for hono,
+> elysia, winston, loglevel, bunyan, log4js, morgan, and roarr.
+> Zero runtime dependencies. Node.js >= 20, Bun, and Deno. Dual ESM/CJS with full TypeScript
+> declarations.
+> Adapter SDKs are optional peers; `winston` and `log4js` load theirs lazily via
+> `importOptionalPeer()` with an install-hinting error.
+
+## Install
+
+```sh
+npm install @mohamedhabibwork/loggerkit
+```
+
+Optional peers, only for the adapters that load them:
+
+```sh
+npm install winston   # adapters/winston
+npm install log4js    # adapters/log4js (name-based auto-registration)
+```
+
+**Entrypoints**
+
+- `@mohamedhabibwork/loggerkit` — core, `Logger`, sinks, formatters, factory, testing helpers
+- `@mohamedhabibwork/loggerkit/sinks/console` · `sinks/memory` · `sinks/file` · `sinks/http`
+- `@mohamedhabibwork/loggerkit/formatters`
+- `@mohamedhabibwork/loggerkit/factory` · `@mohamedhabibwork/loggerkit/manager`
+- `@mohamedhabibwork/loggerkit/pino-compat`
+- `@mohamedhabibwork/loggerkit/adapters/{hono,elysia,winston,loglevel,bunyan,log4js,morgan,roarr}`
+- `@mohamedhabibwork/loggerkit/testing`
+
+## Quick start
+
+```ts
+import { createLogger } from "@mohamedhabibwork/loggerkit/factory";
+
+const logger = createLogger({
+  name: "app",
+  level: "info",
+  sinks: [{ kind: "console" }, { kind: "file", filePath: "./logs/app.log", maxBytes: 10_000_000 }],
+});
+
+logger.info("service started", { port: 3000 });
+logger.child("db").warn("slow query", { durationMs: 812 });
+```
+
+## Semantics
+
+- Levels order `trace < debug < info < warn < error < fatal` (weights 10..60). `parseLevel`
+  trims/lowercases input and throws `InvalidLevelError` for anything else.
+- `LogEntry`: `seq`, `time` (Date), `level`, `message`, `context` (logger bindings plus
+  call-site fields), optional `name`, optional `error` (lifted from `context.error`).
+- `Logger` filters by level before fan-out; a throwing sink is reported through `onError`
+  (default: `console.error`) and never blocks the other sinks.
+- `Logger.child(name, bindings)` adds bindings; names compose as `parent:child`; an empty name
+  keeps the parent name.
+- Sinks own rendering. File and HTTP sinks default to `jsonFormatter()`; the console sink emits
+  its own NDJSON payload (`time`, `level`, `message`, `name`, context fields) unless a formatter
+  is passed.
+- `logger.error(message, error)` / `fatal` attach the Error to the entry; the JSON formatter
+  serializes `name`, `message`, `stack`, and `cause` recursively.
+
+## Sinks
+
+| Sink | Entrypoint | Notes |
+| --- | --- | --- |
+| Console | `.../sinks/console` | Routes to `console.debug/info/warn/error` by level; own NDJSON payload unless a formatter is given |
+| Memory | `.../sinks/memory` | Bounded buffer with `entries()`, `byLevel()`, `clear()`; used by `.../testing` |
+| File | `.../sinks/file` | NDJSON append, zero-dep size-based rotation (`maxBytes`, `maxFiles` default 5), serialized writes |
+| HTTP | `.../sinks/http` | Batched JSON POST via global `fetch`, timeout via AbortController, swallows failures after `console.warn`; `close()` flushes |
+| Custom | any `{ name, write(entry) }` | See docs/custom-sinks.md |
+
+## Formatters
+
+- `jsonFormatter()` — one JSON object per line; reserved keys lifted, errors serialized.
+- `prettyFormatter()` — single line: `HH:MM:SS.mmm LEVEL name: message key=value`.
+
+## Factory and manager
+
+- `createLogger(options)` — accepts concrete sinks or specs `{ kind: "console" | "memory" | "file" | "http" }`.
+- `createMemoryLogger(options)` — returns `{ logger, memory }`.
+- `LogManager` — named registry: `get(name)`, `setLevel(name, level)`, `setGlobalLevel(level)`, `names()`, `close()`.
+
+## Pino-style API
+
+```ts
+import { pino } from "@mohamedhabibwork/loggerkit/pino-compat";
+
+const log = pino({ name: "api" });
+log.child({ requestId: "r1" }).info({ status: 200 }, "handled");
+```
+
+Emits pino-style field names (`msg`, numeric `level`, `time`, `err`, bindings) and writes NDJSON
+to the console by default — pass `sinks` to redirect. `timestamp: false` omits `time`; a function
+supplies it. The merging object comes first, like pino.
+
+## Adapters
+
+| Adapter | Entrypoint | SDK loading | Usage |
+| --- | --- | --- | --- |
+| hono | `.../adapters/hono` | none (structural) | `app.use(requestLogger(logger))`; exposes `c.set("logger")` |
+| elysia | `.../adapters/elysia` | none (structural) | `new Elysia().use(elysiaLogger(logger))` |
+| winston | `.../adapters/winston` | lazy (required) | `winston.add(await createWinstonTransport(logger))` |
+| loglevel | `.../adapters/loglevel` | none (structural) | `Object.assign(log, createLoglevelMethods(logger))` |
+| bunyan | `.../adapters/bunyan` | none (structural) | add `stream: createBunyanStream(logger)` to bunyan `streams` |
+| log4js | `.../adapters/log4js` | lazy (only with `{ name }`) | `await createLog4jsAppender(logger, { name: "loggerkit" })` |
+| morgan | `.../adapters/morgan` | none (structural) | `morgan("combined", { stream: createMorganStream(logger) })` |
+| roarr | `.../adapters/roarr` | none (structural) | `ROARR.write = createRoarrSink(logger)` |
+
+## Errors
+
+- `LoggerKitError` — base class; missing optional peers throw it with the install command.
+- `InvalidLevelError`, `UnknownSinkError`, `SinkClosedError`, `LoggerKitFactoryError`.
+
+## Testing
+
+`@mohamedhabibwork/loggerkit/testing` — `createCapture()` returns
+`{ sink, entries, byLevel(), messages(), clear() }`; also re-exports `MemorySink`.
+
+## Runtime support
+
+Node.js >= 20 (global `fetch` required by the HTTP sink), Bun, Deno; dual ESM/CJS; zero runtime
+dependencies; CI runs the gate on Node 20/22/24/26 plus a Bun/Deno smoke against `dist/`.
+
+## Links
+
+- README: ./README.md
+- Architecture: ./docs/architecture.md
+- Adapters: ./docs/adapters.md
+- Custom sinks: ./docs/custom-sinks.md
+- Operations: ./docs/operations.md
+- Security: ./docs/security.md
