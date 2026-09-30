@@ -1,0 +1,202 @@
+{
+  "name": "@mohamedhabibwork/loggerkit",
+  "version": "0.1.0",
+  "description": "Provider-first, runtime-portable TypeScript logging: sinks, formatters, and framework adapters.",
+  "keywords": [
+    "elysia",
+    "hono",
+    "log",
+    "logger",
+    "logging",
+    "pino",
+    "structured-logging",
+    "typescript",
+    "winston"
+  ],
+  "homepage": "https://github.com/mohamedhabibwork/loggerkit#readme",
+  "bugs": {
+    "url": "https://github.com/mohamedhabibwork/loggerkit/issues"
+  },
+  "license": "MIT",
+  "author": "Mohamed Habib",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mohamedhabibwork/loggerkit.git"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "docs",
+    "llms.txt"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./sinks/console": {
+      "types": "./dist/sinks/console.d.ts",
+      "import": "./dist/sinks/console.js",
+      "require": "./dist/sinks/console.cjs"
+    },
+    "./sinks/memory": {
+      "types": "./dist/sinks/memory.d.ts",
+      "import": "./dist/sinks/memory.js",
+      "require": "./dist/sinks/memory.cjs"
+    },
+    "./sinks/file": {
+      "types": "./dist/sinks/file.d.ts",
+      "import": "./dist/sinks/file.js",
+      "require": "./dist/sinks/file.cjs"
+    },
+    "./sinks/http": {
+      "types": "./dist/sinks/http.d.ts",
+      "import": "./dist/sinks/http.js",
+      "require": "./dist/sinks/http.cjs"
+    },
+    "./formatters": {
+      "types": "./dist/formatters/index.d.ts",
+      "import": "./dist/formatters/index.js",
+      "require": "./dist/formatters/index.cjs"
+    },
+    "./factory": {
+      "types": "./dist/factory.d.ts",
+      "import": "./dist/factory.js",
+      "require": "./dist/factory.cjs"
+    },
+    "./manager": {
+      "types": "./dist/manager.d.ts",
+      "import": "./dist/manager.js",
+      "require": "./dist/manager.cjs"
+    },
+    "./pino-compat": {
+      "types": "./dist/pino-compat.d.ts",
+      "import": "./dist/pino-compat.js",
+      "require": "./dist/pino-compat.cjs"
+    },
+    "./adapters/hono": {
+      "types": "./dist/adapters/hono.d.ts",
+      "import": "./dist/adapters/hono.js",
+      "require": "./dist/adapters/hono.cjs"
+    },
+    "./adapters/elysia": {
+      "types": "./dist/adapters/elysia.d.ts",
+      "import": "./dist/adapters/elysia.js",
+      "require": "./dist/adapters/elysia.cjs"
+    },
+    "./adapters/winston": {
+      "types": "./dist/adapters/winston.d.ts",
+      "import": "./dist/adapters/winston.js",
+      "require": "./dist/adapters/winston.cjs"
+    },
+    "./adapters/loglevel": {
+      "types": "./dist/adapters/loglevel.d.ts",
+      "import": "./dist/adapters/loglevel.js",
+      "require": "./dist/adapters/loglevel.cjs"
+    },
+    "./adapters/bunyan": {
+      "types": "./dist/adapters/bunyan.d.ts",
+      "import": "./dist/adapters/bunyan.js",
+      "require": "./dist/adapters/bunyan.cjs"
+    },
+    "./adapters/log4js": {
+      "types": "./dist/adapters/log4js.d.ts",
+      "import": "./dist/adapters/log4js.js",
+      "require": "./dist/adapters/log4js.cjs"
+    },
+    "./adapters/morgan": {
+      "types": "./dist/adapters/morgan.d.ts",
+      "import": "./dist/adapters/morgan.js",
+      "require": "./dist/adapters/morgan.cjs"
+    },
+    "./adapters/roarr": {
+      "types": "./dist/adapters/roarr.d.ts",
+      "import": "./dist/adapters/roarr.js",
+      "require": "./dist/adapters/roarr.cjs"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js",
+      "require": "./dist/testing.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsup",
+    "clean": "rimraf dist coverage",
+    "lint": "oxlint --deny-warnings --report-unused-disable-directives",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify:exports": "node scripts/verify-exports.mjs",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build",
+    "prepublishOnly": "npm run check",
+    "publish:if-needed": "node scripts/publish-if-needed.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.2",
+    "oxfmt": "^0.67.0",
+    "oxlint": "^1.82.0",
+    "rimraf": "^6.0.1",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3",
+    "vitest": "^5.0.0"
+  },
+  "peerDependencies": {
+    "bunyan": "^1.8.15",
+    "elysia": "^1.1.0",
+    "hono": "^4.6.0",
+    "log4js": "^6.9.1",
+    "loglevel": "^1.9.2",
+    "morgan": "^1.10.0",
+    "roarr": "^7.21.1",
+    "winston": "^3.15.0"
+  },
+  "peerDependenciesMeta": {
+    "bunyan": {
+      "optional": true
+    },
+    "elysia": {
+      "optional": true
+    },
+    "hono": {
+      "optional": true
+    },
+    "log4js": {
+      "optional": true
+    },
+    "loglevel": {
+      "optional": true
+    },
+    "morgan": {
+      "optional": true
+    },
+    "roarr": {
+      "optional": true
+    },
+    "winston": {
+      "optional": true
+    }
+  },
+  "overrides": {
+    "esbuild": "0.28.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
