@@ -3,13 +3,29 @@
   "version": "0.1.0",
   "description": "Provider-first, runtime-portable TypeScript logging: sinks, formatters, and framework adapters.",
   "keywords": [
+    "datadog",
+    "elasticsearch",
+    "elk",
     "elysia",
+    "express",
+    "fastify",
+    "gelf",
+    "graylog",
     "hono",
     "log",
     "logger",
     "logging",
+    "logstash",
+    "loki",
+    "nestjs",
+    "opensearch",
+    "opentelemetry",
+    "otlp",
     "pino",
+    "redaction",
+    "splunk",
     "structured-logging",
+    "syslog",
     "typescript",
     "winston"
   ],
@@ -126,6 +142,91 @@
       "types": "./dist/testing.d.ts",
       "import": "./dist/testing.js",
       "require": "./dist/testing.cjs"
+    },
+    "./processors": {
+      "types": "./dist/processors.d.ts",
+      "import": "./dist/processors.js",
+      "require": "./dist/processors.cjs"
+    },
+    "./context": {
+      "types": "./dist/context.d.ts",
+      "import": "./dist/context.js",
+      "require": "./dist/context.cjs"
+    },
+    "./sinks/elasticsearch": {
+      "types": "./dist/sinks/elasticsearch.d.ts",
+      "import": "./dist/sinks/elasticsearch.js",
+      "require": "./dist/sinks/elasticsearch.cjs"
+    },
+    "./sinks/logstash": {
+      "types": "./dist/sinks/logstash.d.ts",
+      "import": "./dist/sinks/logstash.js",
+      "require": "./dist/sinks/logstash.cjs"
+    },
+    "./sinks/loki": {
+      "types": "./dist/sinks/loki.d.ts",
+      "import": "./dist/sinks/loki.js",
+      "require": "./dist/sinks/loki.cjs"
+    },
+    "./sinks/datadog": {
+      "types": "./dist/sinks/datadog.d.ts",
+      "import": "./dist/sinks/datadog.js",
+      "require": "./dist/sinks/datadog.cjs"
+    },
+    "./sinks/otlp": {
+      "types": "./dist/sinks/otlp.d.ts",
+      "import": "./dist/sinks/otlp.js",
+      "require": "./dist/sinks/otlp.cjs"
+    },
+    "./sinks/syslog": {
+      "types": "./dist/sinks/syslog.d.ts",
+      "import": "./dist/sinks/syslog.js",
+      "require": "./dist/sinks/syslog.cjs"
+    },
+    "./sinks/gelf": {
+      "types": "./dist/sinks/gelf.d.ts",
+      "import": "./dist/sinks/gelf.js",
+      "require": "./dist/sinks/gelf.cjs"
+    },
+    "./sinks/splunk": {
+      "types": "./dist/sinks/splunk.d.ts",
+      "import": "./dist/sinks/splunk.js",
+      "require": "./dist/sinks/splunk.cjs"
+    },
+    "./adapters/pino": {
+      "types": "./dist/adapters/pino.d.ts",
+      "import": "./dist/adapters/pino.js",
+      "require": "./dist/adapters/pino.cjs"
+    },
+    "./adapters/consola": {
+      "types": "./dist/adapters/consola.d.ts",
+      "import": "./dist/adapters/consola.js",
+      "require": "./dist/adapters/consola.cjs"
+    },
+    "./adapters/debug": {
+      "types": "./dist/adapters/debug.d.ts",
+      "import": "./dist/adapters/debug.js",
+      "require": "./dist/adapters/debug.cjs"
+    },
+    "./adapters/express": {
+      "types": "./dist/adapters/express.d.ts",
+      "import": "./dist/adapters/express.js",
+      "require": "./dist/adapters/express.cjs"
+    },
+    "./adapters/fastify": {
+      "types": "./dist/adapters/fastify.d.ts",
+      "import": "./dist/adapters/fastify.js",
+      "require": "./dist/adapters/fastify.cjs"
+    },
+    "./adapters/nestjs": {
+      "types": "./dist/adapters/nestjs.d.ts",
+      "import": "./dist/adapters/nestjs.js",
+      "require": "./dist/adapters/nestjs.cjs"
+    },
+    "./adapters/console": {
+      "types": "./dist/adapters/console.d.ts",
+      "import": "./dist/adapters/console.js",
+      "require": "./dist/adapters/console.cjs"
     },
     "./package.json": "./package.json"
   },
