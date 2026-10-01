@@ -1,6 +1,6 @@
 {
   "name": "@mohamedhabibwork/loggerkit",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Provider-first, runtime-portable TypeScript logging: sinks, formatters, and framework adapters.",
   "keywords": [
     "datadog",
