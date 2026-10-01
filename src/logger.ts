@@ -1,9 +1,12 @@
 import {
+  internalError,
   levelEnabled,
   parseLevel,
+  type ContextProvider,
   type Formatter,
   type LogEntry,
   type LogLevel,
+  type Processor,
   type Sink,
 } from "./core.js";
 
@@ -13,6 +16,10 @@ export interface LoggerOptions {
   sinks?: Sink[];
   formatter?: Formatter;
   bindings?: Record<string, unknown>;
+  /** Run in order on every entry; a processor returning null drops the entry. */
+  processors?: Processor[];
+  /** Ambient fields merged under call-site fields (see `createLogContext`). */
+  contextProvider?: ContextProvider;
   /** Error thrown when a sink rejects; defaults to warn-and-continue via console.error. */
   onError?: (error: unknown, sinkName: string) => void;
 }
@@ -29,6 +36,8 @@ export class Logger {
   private readonly sinks: Sink[];
   private readonly bindings: Record<string, unknown>;
   private readonly onError: (error: unknown, sinkName: string) => void;
+  private readonly processors: readonly Processor[];
+  private readonly contextProvider?: ContextProvider;
   private seq = 0;
 
   constructor(options: LoggerOptions = {}) {
@@ -38,6 +47,26 @@ export class Logger {
     this.formatter = options.formatter;
     this.bindings = { ...options.bindings };
     this.onError = options.onError ?? defaultOnError;
+    this.processors = [...(options.processors ?? [])];
+    this.contextProvider = options.contextProvider;
+  }
+
+  /** True when an entry at `level` would be emitted; use to skip costly field building. */
+  isLevelEnabled(level: LogLevel): boolean {
+    return levelEnabled(level, this.currentLevel);
+  }
+
+  /**
+   * Starts a timer; the returned function logs `message` with
+   * `durationMs` at `level` (default `debug`) and returns the duration.
+   */
+  time(message: string, level: LogLevel = "debug"): (fields?: Record<string, unknown>) => number {
+    const startedAt = performance.now();
+    return (fields) => {
+      const durationMs = Math.round((performance.now() - startedAt) * 1000) / 1000;
+      this.emit(level, message, { ...fields, durationMs });
+      return durationMs;
+    };
   }
 
   get level(): LogLevel {
@@ -82,6 +111,8 @@ export class Logger {
       formatter: this.formatter,
       bindings: { ...this.bindings, ...bindings },
       onError: this.onError,
+      processors: [...this.processors],
+      contextProvider: this.contextProvider,
     });
   }
 
@@ -122,7 +153,19 @@ export class Logger {
       return;
     }
     this.seq += 1;
-    const entry = buildEntry(this.seq, this.name, level, message, this.bindings, fields);
+    let ambient: Readonly<Record<string, unknown>> | undefined;
+    try {
+      ambient = this.contextProvider?.();
+    } catch (error) {
+      this.onError(error, "contextProvider");
+    }
+    const merged = ambient === undefined ? fields : { ...ambient, ...fields };
+    const entry = this.process(
+      buildEntry(this.seq, this.name, level, message, this.bindings, merged),
+    );
+    if (entry === undefined) {
+      return;
+    }
     for (const sink of this.sinks) {
       try {
         const result = sink.write(entry);
@@ -133,6 +176,22 @@ export class Logger {
         this.onError(error, sink.name);
       }
     }
+  }
+
+  private process(entry: LogEntry): LogEntry | undefined {
+    let current: LogEntry | null | undefined = entry;
+    for (const processor of this.processors) {
+      try {
+        current = processor(current);
+      } catch (error) {
+        this.onError(error, "processor");
+        return undefined;
+      }
+      if (current === null || current === undefined) {
+        return undefined;
+      }
+    }
+    return current;
   }
 
   /** Waits for all async sink writes currently in flight. */
@@ -187,5 +246,5 @@ function buildEntry(
 }
 
 function defaultOnError(error: unknown, sinkName: string): void {
-  console.error(`[loggerkit] sink "${sinkName}" failed to write:`, error);
+  internalError(`[loggerkit] sink "${sinkName}" failed to write:`, error);
 }

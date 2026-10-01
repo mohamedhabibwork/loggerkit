@@ -64,8 +64,119 @@ export interface Sink {
   close?(): void | Promise<void>;
 }
 
+/**
+ * Transforms an entry before it reaches sinks. Return a (new) entry to
+ * keep it, or `null`/`undefined` to drop it. Processors must not mutate
+ * their input.
+ */
+export type Processor = (entry: LogEntry) => LogEntry | null | undefined;
+
+/** Supplies ambient fields (e.g. request id from async context) per entry. */
+export type ContextProvider = () => Readonly<Record<string, unknown>> | undefined;
+
+/**
+ * Minimal structural logger contract shared by the @mohamedhabibwork kits
+ * (cachekit, queuekit, notifykit, storagekit). A loggerkit `Logger`
+ * satisfies it; so do pino, winston and console-shaped objects.
+ */
+export interface KitLogger {
+  debug(message: string, fields?: Record<string, unknown>): void;
+  info(message: string, fields?: Record<string, unknown>): void;
+  warn(message: string, fields?: Record<string, unknown>): void;
+  error(message: string, errorOrFields?: Error | Record<string, unknown>): void;
+}
+
 /** Renders a LogEntry into a string (or any serializable value) for a sink. */
 export type Formatter = (entry: LogEntry) => string;
+
+/** Context keys that formatters treat as entry metadata rather than fields. */
+export const RESERVED_KEYS: ReadonlySet<string> = new Set([
+  "seq",
+  "time",
+  "level",
+  "message",
+  "name",
+  "error",
+]);
+
+/** Context fields minus reserved keys, ready to merge into a payload. */
+export function contextFields(entry: LogEntry): Record<string, unknown> {
+  const output: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(entry.context)) {
+    if (!RESERVED_KEYS.has(key)) {
+      output[key] = value;
+    }
+  }
+  return output;
+}
+
+/** JSON-safe error shape with recursive `cause`. */
+export function serializeError(error: Error): Record<string, unknown> {
+  const output: Record<string, unknown> = {
+    name: error.name,
+    message: error.message,
+  };
+  if (error.stack !== undefined) {
+    output.stack = error.stack;
+  }
+  const cause = (error as { cause?: unknown }).cause;
+  if (cause !== undefined) {
+    output.cause = cause instanceof Error ? serializeError(cause) : cause;
+  }
+  return output;
+}
+
+/**
+ * JSON.stringify that never throws: cycles become "[Circular]", BigInt
+ * becomes a string, and Errors are serialized. Sinks use it so one bad
+ * field cannot poison a whole batch.
+ */
+export function safeStringify(value: unknown): string {
+  const seen = new WeakSet<object>();
+  try {
+    return (
+      JSON.stringify(value, (_key, item: unknown) => {
+        if (typeof item === "bigint") {
+          return item.toString();
+        }
+        if (item instanceof Error) {
+          return serializeError(item);
+        }
+        if (item !== null && typeof item === "object") {
+          if (seen.has(item)) {
+            return "[Circular]";
+          }
+          seen.add(item);
+        }
+        return item;
+      }) ?? "null"
+    );
+  } catch {
+    return '"[unserializable]"';
+  }
+}
+
+/**
+ * Internal diagnostics bound at module load, before any console
+ * capture, so loggerkit's own warnings can never feed back into a
+ * captured console and loop.
+ */
+export const internalWarn: (...args: unknown[]) => void = console.warn.bind(console);
+export const internalError: (...args: unknown[]) => void = console.error.bind(console);
+
+/** Syslog severity (RFC 5424) for a level; shared by syslog and GELF. */
+export function syslogSeverity(level: LogLevel): number {
+  return SYSLOG_SEVERITY[level];
+}
+
+const SYSLOG_SEVERITY: Readonly<Record<LogLevel, number>> = {
+  fatal: 2,
+  error: 3,
+  warn: 4,
+  info: 6,
+  debug: 7,
+  trace: 7,
+};
 
 /** Sink construction options resolved by the factory. */
 export interface LoggerKitOptions {
