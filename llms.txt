@@ -146,6 +146,7 @@ dependencies; CI runs the gate on Node 20/22/24/26 plus a Bun/Deno smoke against
 
 ## Core features
 - Logger options: processors (redact, sample, rateLimit, enrich, minLevel), contextProvider.
+- redact(options?) defaults to DEFAULT_REDACT_KEYS; options: enabled, useDefaultKeys, keys (added), excludeKeys, paths, censor (value | fn), remove, maxDepth. sample/rateLimit accept enabled.
 - ./context — createLogContext() (AsyncLocalStorage): run, assign, get, provider.
 - logger.time(message, level?) returns end(fields) → durationMs; logger.isLevelEnabled(level).
 - Formatters: ecsFormatter, logstashFormatter, logfmtFormatter.

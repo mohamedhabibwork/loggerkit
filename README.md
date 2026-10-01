@@ -89,20 +89,14 @@ See [Backends](./docs/backends.md) for every option and the matching Logstash/Lo
 ## Processors, context and timers
 
 ```ts
-import {
-  createLogger,
-  DEFAULT_REDACT_KEYS,
-  rateLimit,
-  redact,
-  sample,
-} from "@mohamedhabibwork/loggerkit";
+import { createLogger, rateLimit, redact, sample } from "@mohamedhabibwork/loggerkit";
 import { createLogContext } from "@mohamedhabibwork/loggerkit/context";
 
 const context = createLogContext();
 const logger = createLogger({
   contextProvider: context.provider, // request-scoped fields via AsyncLocalStorage
   processors: [
-    redact({ keys: DEFAULT_REDACT_KEYS, paths: ["req.headers.*"] }),
+    redact({ keys: ["ssn"], paths: ["req.headers.*"] }), // default secret keys + yours
     sample({ rates: { debug: 0.1 } }),
     rateLimit({ limit: 100 }), // per level+message per second; errors exempt
   ],
