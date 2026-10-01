@@ -1,7 +1,13 @@
 import { safeStringify, type LogEntry } from "../core.js";
 import { toLogstashEvent, type LogstashFormatterOptions } from "../formatters/logstash.js";
 import { BatchingSink, PartialBatchError, type BatchOptions } from "./batch.js";
-import { basicAuth, createSocketWriter, sendHttp, type SocketWriter } from "./transport.js";
+import {
+  basicAuth,
+  createSocketWriter,
+  sendHttp,
+  type SocketOptions,
+  type SocketWriter,
+} from "./transport.js";
 
 export interface LogstashSinkOptions extends BatchOptions, LogstashFormatterOptions {
   /**
@@ -20,6 +26,8 @@ export interface LogstashSinkOptions extends BatchOptions, LogstashFormatterOpti
   password?: string;
   headers?: Record<string, string>;
   timeoutMs?: number;
+  /** TLS-only settings for `protocol: "tls"` (CA bundle, verification opt-out). */
+  tls?: SocketOptions["tls"];
   name?: string;
 }
 
@@ -46,6 +54,7 @@ export class LogstashSink extends BatchingSink {
         host: options.host,
         port: options.port,
         timeoutMs: options.timeoutMs,
+        ...(options.tls === undefined ? {} : { tls: options.tls }),
       });
     }
   }

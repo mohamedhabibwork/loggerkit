@@ -115,6 +115,13 @@ export interface SocketOptions {
   host: string;
   port: number;
   timeoutMs?: number;
+  /** TLS-only settings; certificates are always verified by default. */
+  tls?: {
+    /** Extra CA bundle for private/self-signed CAs (PEM). */
+    ca?: string;
+    /** Set `false` only for local testing; defaults to `true`. */
+    rejectUnauthorized?: boolean;
+  };
 }
 
 /** Sends raw payloads over a lazily opened TCP/TLS connection or UDP socket. */
@@ -136,6 +143,9 @@ interface StreamModule {
   connect(options: Record<string, unknown>): StreamSocket;
 }
 
+/** The largest IPv4 UDP payload a datagram can carry (IP header included limit). */
+const UDP_MAX_BYTES = 65507;
+
 interface DgramSocket {
   send(data: string, port: number, host: string, callback: (error: Error | null) => void): void;
   close(callback?: () => void): void;
@@ -147,7 +157,25 @@ interface DgramSocket {
  * the package; only sending through a socket sink requires Node/Bun/Deno.
  */
 export function createSocketWriter(options: SocketOptions): SocketWriter {
+  validateTarget(options.host, options.port);
   return options.protocol === "udp" ? createUdpWriter(options) : createStreamWriter(options);
+}
+
+/**
+ * Rejects targets `node:net`/`node:dgram` would mis-handle: empty hosts,
+ * control characters or whitespace smuggled into the host string, and
+ * out-of-range ports. Fails at construction, not on first write.
+ */
+function validateTarget(host: string, port: number): void {
+  if (
+    host === "" ||
+    [...host].some((char) => (char.codePointAt(0) ?? 0) < 0x21 || char.codePointAt(0) === 0x7f)
+  ) {
+    throw new TransportError(`Invalid socket host ${JSON.stringify(host.slice(0, 32))}`);
+  }
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new TransportError(`Invalid socket port ${String(port)} (expected 1-65535)`);
+  }
 }
 
 function createStreamWriter(options: SocketOptions): SocketWriter {
@@ -188,7 +216,12 @@ function createStreamWriter(options: SocketOptions): SocketWriter {
       const active = await connect();
       await withTimeout(
         new Promise<void>((resolve, reject) => {
-          active.write(payload, (error) => (error ? reject(error) : resolve()));
+          const done = (error?: Error | null): void => (error ? reject(error) : resolve());
+          // Honor write() backpressure: buffering past the high-water mark
+          // on a slow receiver would grow memory without bound.
+          if (active.write(payload, done) === false) {
+            active.once("drain", () => resolve());
+          }
         }),
         timeoutMs,
         () => {
@@ -252,6 +285,15 @@ async function openStream(options: SocketOptions, timeoutMs: number): Promise<St
       host: options.host,
       port: options.port,
       ...(isTls && !isIpAddress(options.host) ? { servername: options.host } : {}),
+      // Pin the floor and keep certificate verification on unless the
+      // caller explicitly opts out (local testing only).
+      ...(isTls
+        ? {
+            minVersion: "TLSv1.2",
+            rejectUnauthorized: options.tls?.rejectUnauthorized ?? true,
+            ...(options.tls?.ca === undefined ? {} : { ca: options.tls.ca }),
+          }
+        : {}),
     });
     const timer = setTimeout(() => {
       socket.destroy();
@@ -271,6 +313,7 @@ async function openStream(options: SocketOptions, timeoutMs: number): Promise<St
 }
 
 const KEEP_ALIVE_MS = 30_000;
+const UDP_ENCODER = new TextEncoder();
 
 function createUdpWriter(options: SocketOptions): SocketWriter {
   let socket: Promise<DgramSocket> | undefined;
@@ -284,6 +327,13 @@ function createUdpWriter(options: SocketOptions): SocketWriter {
   };
   return {
     async send(payload) {
+      const bytes = UDP_ENCODER.encode(payload).length;
+      if (bytes > UDP_MAX_BYTES) {
+        // Fail loudly instead of surfacing as an opaque EMSGSIZE from dgram.
+        throw new TransportError(
+          `UDP payload of ${String(bytes)} bytes exceeds the ${String(UDP_MAX_BYTES)}-byte datagram limit for ${options.host}:${String(options.port)}`,
+        );
+      }
       socket ??= open();
       const active = await socket;
       await new Promise<void>((resolve, reject) => {

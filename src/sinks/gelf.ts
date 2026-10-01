@@ -1,6 +1,11 @@
 import { safeStringify, contextFields, syslogSeverity, type LogEntry } from "../core.js";
 import { BatchingSink, PartialBatchError, type BatchOptions } from "./batch.js";
-import { createSocketWriter, sendHttp, type SocketWriter } from "./transport.js";
+import {
+  createSocketWriter,
+  type SocketOptions,
+  type SocketWriter,
+  sendHttp,
+} from "./transport.js";
 
 export interface GelfSinkOptions extends BatchOptions {
   /** `udp` (uncompressed, ≤ 8192 bytes), `tcp`/`tls` (null-delimited) or `http`. */
@@ -14,6 +19,8 @@ export interface GelfSinkOptions extends BatchOptions {
   source?: string;
   headers?: Record<string, string>;
   timeoutMs?: number;
+  /** TLS-only settings for `protocol: "tls"` (CA bundle, verification opt-out). */
+  tls?: SocketOptions["tls"];
   name?: string;
 }
 
@@ -42,6 +49,7 @@ export class GelfSink extends BatchingSink {
         host: options.host,
         port: options.port ?? 12201,
         timeoutMs: options.timeoutMs,
+        ...(options.tls === undefined ? {} : { tls: options.tls }),
       });
     }
   }

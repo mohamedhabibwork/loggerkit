@@ -1,6 +1,6 @@
 import { contextFields, safeStringify, syslogSeverity, type LogEntry } from "../core.js";
 import { BatchingSink, PartialBatchError, type BatchOptions } from "./batch.js";
-import { createSocketWriter, type SocketWriter } from "./transport.js";
+import { createSocketWriter, type SocketOptions, type SocketWriter } from "./transport.js";
 
 export interface SyslogSinkOptions extends BatchOptions {
   host: string;
@@ -15,6 +15,8 @@ export interface SyslogSinkOptions extends BatchOptions {
   /** HOSTNAME field; defaults to `-` (nil). */
   hostname?: string;
   timeoutMs?: number;
+  /** TLS-only settings for `protocol: "tls"` (CA bundle, verification opt-out). */
+  tls?: SocketOptions["tls"];
   name?: string;
 }
 
@@ -34,6 +36,7 @@ export class SyslogSink extends BatchingSink {
       host: options.host,
       port: options.port ?? (protocol === "tls" ? 6514 : 514),
       timeoutMs: options.timeoutMs,
+      ...(options.tls === undefined ? {} : { tls: options.tls }),
     });
   }
 

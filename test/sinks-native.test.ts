@@ -3,6 +3,7 @@ import { createServer, type AddressInfo, type Server } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LogEntry } from "../src/core.js";
 import { createLogger } from "../src/factory.js";
+import { createSocketWriter } from "../src/sinks/transport.js";
 import { BatchingSink } from "../src/sinks/batch.js";
 import { DatadogSink } from "../src/sinks/datadog.js";
 import { ElasticsearchSink } from "../src/sinks/elasticsearch.js";
@@ -282,6 +283,21 @@ describe("socket sinks", () => {
   it("formatSyslog escapes structured data and handles empty context", () => {
     expect(formatSyslog(entry("m", { context: { q: 'a"]b' } }))).toContain('q="a\\"\\]b"');
     expect(formatSyslog(entry("m", { context: {}, level: "error" }))).toMatch(/^<11>1 .* - m$/);
+  });
+
+  it("rejects invalid socket targets at construction", () => {
+    expect(() => createSocketWriter({ protocol: "tcp", host: "", port: 514 })).toThrow(/host/);
+    expect(() => createSocketWriter({ protocol: "tcp", host: "host\n", port: 514 })).toThrow(
+      /host/,
+    );
+    expect(() => createSocketWriter({ protocol: "udp", host: "h", port: 0 })).toThrow(/port/);
+    expect(() => createSocketWriter({ protocol: "udp", host: "h", port: 70000 })).toThrow(/port/);
+  });
+
+  it("rejects oversized udp payloads", async () => {
+    const writer = createSocketWriter({ protocol: "udp", host: "127.0.0.1", port: 6514 });
+    await expect(writer.send("x".repeat(65508))).rejects.toThrow(/datagram limit/);
+    await writer.close().catch(() => undefined);
   });
 });
 
