@@ -33,6 +33,69 @@ describe("redact", () => {
   });
 });
 
+describe("redact configuration", () => {
+  const run = (options: Parameters<typeof redact>[0], fields: Record<string, unknown>) => {
+    const { logger, memory } = createMemoryLogger({ processors: [redact(options)] });
+    logger.info("x", fields);
+    return memory.entries()[0]?.context;
+  };
+
+  it("uses the default keys when called with no options", () => {
+    const { logger, memory } = createMemoryLogger({ processors: [redact()] });
+    logger.info("x", { password: "p", apiKey: "k", name: "a" });
+    expect(memory.entries()[0]?.context).toEqual({
+      password: "[REDACTED]",
+      apiKey: "[REDACTED]",
+      name: "a",
+    });
+  });
+
+  it("adds extra keys on top of the defaults", () => {
+    expect(run({ keys: ["ssn"] }, { ssn: "1", token: "t" })).toEqual({
+      ssn: "[REDACTED]",
+      token: "[REDACTED]",
+    });
+  });
+
+  it("excludes chosen defaults and can drop the defaults entirely", () => {
+    expect(run({ excludeKeys: ["Token"] }, { token: "t", password: "p" })).toEqual({
+      token: "t",
+      password: "[REDACTED]",
+    });
+    expect(run({ useDefaultKeys: false, keys: ["pin"] }, { pin: 1, password: "p" })).toEqual({
+      pin: "[REDACTED]",
+      password: "p",
+    });
+  });
+
+  it("can be disabled for local debugging", () => {
+    expect(run({ enabled: false }, { password: "p" })).toEqual({ password: "p" });
+  });
+
+  it("supports a censor function and a depth limit", () => {
+    const mask = (value: unknown) => `****${String(value).slice(-4)}`;
+    expect(run({ keys: ["card"], censor: mask }, { card: "4111111111111111" })).toEqual({
+      card: "****1111",
+    });
+    expect(run({ maxDepth: 0 }, { a: { password: "p" }, password: "q" })).toEqual({
+      a: { password: "p" },
+      password: "[REDACTED]",
+    });
+  });
+
+  it("lets sample and rateLimit be switched off", () => {
+    const { logger, memory } = createMemoryLogger({
+      level: "debug",
+      processors: [
+        sample({ enabled: false, rates: { debug: 0 } }),
+        rateLimit({ enabled: false, limit: 0 }),
+      ],
+    });
+    logger.debug("kept");
+    expect(memory.entries()).toHaveLength(1);
+  });
+});
+
 describe("sample / rateLimit / enrich / minLevel", () => {
   it("samples by level with an injectable random source", () => {
     const values = [0.1, 0.9];
