@@ -1,20 +1,34 @@
 import { levelEnabled, type LogEntry, type LogLevel, type Processor } from "./core.js";
 
 export interface RedactOptions {
+  /** Turn redaction off (e.g. local debugging) without changing the pipeline. Defaults to true. */
+  enabled?: boolean;
+  /** Include `DEFAULT_REDACT_KEYS`. Defaults to true; set false to supply your own list only. */
+  useDefaultKeys?: boolean;
+  /** Extra key names censored at any depth, case-insensitive, added to the defaults. */
+  keys?: readonly string[];
+  /** Key names to never censor, even if listed in the defaults or `keys`. */
+  excludeKeys?: readonly string[];
   /**
    * Dotted paths into `context` to censor, e.g. `"user.password"`.
    * `*` matches any single key: `"headers.*"`.
    */
-  paths?: string[];
-  /** Key names censored at any depth, case-insensitive (e.g. `"authorization"`). */
-  keys?: readonly string[];
-  /** Replacement value; defaults to `"[REDACTED]"`. Ignored when `remove` is true. */
-  censor?: unknown;
-  /** Delete matched keys instead of replacing them. */
+  paths?: readonly string[];
+  /**
+   * Replacement value, or a function of the original value and key
+   * (e.g. keep the last 4 characters). Defaults to `"[REDACTED]"`.
+   * Ignored when `remove` is true.
+   */
+  censor?: unknown | ((value: unknown, key: string) => unknown);
+  /** Delete matched keys instead of replacing them. Defaults to false. */
   remove?: boolean;
+  /** Max object/array nesting searched for `keys`. Defaults to 12. */
+  maxDepth?: number;
 }
 
-/** Common secret-bearing key names, usable as `redact({ keys: DEFAULT_REDACT_KEYS })`. */
+type Censor = (value: unknown, key: string) => unknown;
+
+/** Secret-bearing key names `redact()` censors unless `useDefaultKeys: false`. */
 export const DEFAULT_REDACT_KEYS: readonly string[] = [
   "password",
   "passwd",
@@ -31,75 +45,95 @@ export const DEFAULT_REDACT_KEYS: readonly string[] = [
   "cvv",
 ];
 
-const MAX_REDACT_DEPTH = 12;
+const DEFAULT_MAX_DEPTH = 12;
+const DEFAULT_CENSOR = "[REDACTED]";
 
 /**
  * Censors sensitive fields (objects and arrays) without mutating the
  * original context. It does not rewrite `message` or error text — keep
  * secrets out of message strings.
  */
-export function redact(options: RedactOptions): Processor {
-  const censor = options.censor ?? "[REDACTED]";
-  const remove = options.remove === true;
-  const keys = new Set((options.keys ?? []).map((key) => key.toLowerCase()));
+export function redact(options: RedactOptions = {}): Processor {
+  if (options.enabled === false) {
+    return (entry) => entry;
+  }
+  const censorOption = options.censor ?? DEFAULT_CENSOR;
+  const censor: Censor =
+    typeof censorOption === "function" ? (censorOption as Censor) : () => censorOption;
+  const settings: RedactSettings = {
+    keys: resolveKeys(options),
+    censor,
+    remove: options.remove === true,
+    maxDepth: Math.max(0, options.maxDepth ?? DEFAULT_MAX_DEPTH),
+  };
   const paths = (options.paths ?? []).map((path) => path.split("."));
 
   return (entry) => {
-    let context =
-      keys.size > 0 ? redactKeys(entry.context, keys, censor, remove, 0) : entry.context;
+    let context = settings.keys.size > 0 ? redactKeys(entry.context, settings, 0) : entry.context;
     for (const path of paths) {
-      context = redactPath(context, path, censor, remove);
+      context = redactPath(context, path, settings);
     }
     return context === entry.context ? entry : { ...entry, context };
   };
 }
 
+interface RedactSettings {
+  readonly keys: ReadonlySet<string>;
+  readonly censor: Censor;
+  readonly remove: boolean;
+  readonly maxDepth: number;
+}
+
+function resolveKeys(options: RedactOptions): ReadonlySet<string> {
+  const base = options.useDefaultKeys === false ? [] : DEFAULT_REDACT_KEYS;
+  const excluded = new Set((options.excludeKeys ?? []).map((key) => key.toLowerCase()));
+  return new Set(
+    [...base, ...(options.keys ?? [])]
+      .map((key) => key.toLowerCase())
+      .filter((key) => !excluded.has(key)),
+  );
+}
+
 function redactKeys(
   value: Readonly<Record<string, unknown>>,
-  keys: ReadonlySet<string>,
-  censor: unknown,
-  remove: boolean,
+  settings: RedactSettings,
   depth: number,
 ): Readonly<Record<string, unknown>> {
-  if (depth > MAX_REDACT_DEPTH) {
+  if (depth > settings.maxDepth) {
     return value;
   }
   let changed = false;
   const output: Record<string, unknown> = {};
   for (const [key, child] of Object.entries(value)) {
-    if (keys.has(key.toLowerCase())) {
+    if (settings.keys.has(key.toLowerCase())) {
       changed = true;
-      if (!remove) {
-        output[key] = censor;
+      if (!settings.remove) {
+        output[key] = settings.censor(child, key);
       }
       continue;
     }
-    const next = redactValue(child, keys, censor, remove, depth + 1);
+    const next = redactValue(child, settings, depth + 1);
     changed ||= next !== child;
     output[key] = next;
   }
   return changed ? output : value;
 }
 
-function redactValue(
-  value: unknown,
-  keys: ReadonlySet<string>,
-  censor: unknown,
-  remove: boolean,
-  depth: number,
-): unknown {
+function redactValue(value: unknown, settings: RedactSettings, depth: number): unknown {
   if (Array.isArray(value)) {
-    const mapped = value.map((item) => redactValue(item, keys, censor, remove, depth + 1));
+    if (depth > settings.maxDepth) {
+      return value;
+    }
+    const mapped = value.map((item) => redactValue(item, settings, depth + 1));
     return mapped.some((item, index) => item !== value[index]) ? mapped : value;
   }
-  return isPlainObject(value) ? redactKeys(value, keys, censor, remove, depth) : value;
+  return isPlainObject(value) ? redactKeys(value, settings, depth) : value;
 }
 
 function redactPath(
   value: Readonly<Record<string, unknown>>,
   path: readonly string[],
-  censor: unknown,
-  remove: boolean,
+  settings: RedactSettings,
 ): Readonly<Record<string, unknown>> {
   const [head, ...rest] = path;
   if (head === undefined) {
@@ -112,16 +146,16 @@ function redactPath(
   const output: Record<string, unknown> = { ...value };
   for (const key of targets) {
     if (rest.length === 0) {
-      if (remove) {
+      if (settings.remove) {
         delete output[key];
       } else {
-        output[key] = censor;
+        output[key] = settings.censor(value[key], key);
       }
       continue;
     }
     const child = value[key];
     if (isPlainObject(child)) {
-      output[key] = redactPath(child, rest, censor, remove);
+      output[key] = redactPath(child, rest, settings);
     }
   }
   return output;
@@ -136,6 +170,8 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 export interface SampleOptions {
+  /** Turn sampling off (keep everything). Defaults to true. */
+  enabled?: boolean;
   /** Keep ratio per level in [0, 1]; levels not listed are always kept. */
   rates: Partial<Record<LogLevel, number>>;
   /** Random source in [0, 1); injectable for tests. */
@@ -144,6 +180,9 @@ export interface SampleOptions {
 
 /** Probabilistic sampling, typically for high-volume `debug`/`info` traffic. */
 export function sample(options: SampleOptions): Processor {
+  if (options.enabled === false) {
+    return (entry) => entry;
+  }
   const random = options.random ?? Math.random;
   return (entry) => {
     const rate = options.rates[entry.level];
@@ -155,6 +194,8 @@ export function sample(options: SampleOptions): Processor {
 }
 
 export interface RateLimitOptions {
+  /** Turn rate limiting off. Defaults to true. */
+  enabled?: boolean;
   /** Max entries per window per key. */
   limit: number;
   /** Window length in ms; defaults to 1000. */
@@ -169,6 +210,9 @@ export interface RateLimitOptions {
 
 /** Drops entries beyond `limit` per key per window. */
 export function rateLimit(options: RateLimitOptions): Processor {
+  if (options.enabled === false) {
+    return (entry) => entry;
+  }
   const windowMs = options.windowMs ?? 1000;
   const keyOf = options.key ?? ((entry: LogEntry) => `${entry.level}:${entry.message}`);
   const exemptFrom = options.exemptFrom ?? "error";
