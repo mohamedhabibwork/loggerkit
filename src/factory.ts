@@ -4,11 +4,34 @@ import { createConsoleSink } from "./sinks/console.js";
 import { FileSink } from "./sinks/file.js";
 import { HttpSink } from "./sinks/http.js";
 import { MemorySink } from "./sinks/memory.js";
+import { DatadogSink, type DatadogSinkOptions } from "./sinks/datadog.js";
+import { ElasticsearchSink, type ElasticsearchSinkOptions } from "./sinks/elasticsearch.js";
+import { GelfSink, type GelfSinkOptions } from "./sinks/gelf.js";
+import { LogstashSink, type LogstashSinkOptions } from "./sinks/logstash.js";
+import { LokiSink, type LokiSinkOptions } from "./sinks/loki.js";
+import { OtlpSink, type OtlpSinkOptions } from "./sinks/otlp.js";
+import { SplunkSink, type SplunkSinkOptions } from "./sinks/splunk.js";
+import { SyslogSink, type SyslogSinkOptions } from "./sinks/syslog.js";
 
-export type SinkKind = "console" | "memory" | "file" | "http";
+export type BasicSinkKind = "console" | "memory" | "file" | "http";
 
-export interface SinkSpec {
-  kind: SinkKind;
+/** Native backend sinks, configured through `options`. */
+export type NativeSinkSpec =
+  | { kind: "elasticsearch"; options: ElasticsearchSinkOptions }
+  | { kind: "logstash"; options: LogstashSinkOptions }
+  | { kind: "loki"; options: LokiSinkOptions }
+  | { kind: "datadog"; options: DatadogSinkOptions }
+  | { kind: "otlp"; options: OtlpSinkOptions }
+  | { kind: "syslog"; options: SyslogSinkOptions }
+  | { kind: "gelf"; options: GelfSinkOptions }
+  | { kind: "splunk"; options: SplunkSinkOptions };
+
+export type SinkKind = BasicSinkKind | NativeSinkSpec["kind"];
+
+export type SinkSpec = BasicSinkSpec | NativeSinkSpec;
+
+export interface BasicSinkSpec {
+  kind: BasicSinkKind;
   name?: string;
   minLevel?: LogLevel;
   formatter?: Formatter;
@@ -33,6 +56,9 @@ function isSink(value: Sink | SinkSpec): value is Sink {
 }
 
 export function resolveSink(spec: SinkSpec): Sink {
+  if ("options" in spec) {
+    return resolveNativeSink(spec);
+  }
   const { kind } = spec;
   if (kind === "console") {
     return createConsoleSink({
@@ -70,6 +96,29 @@ export function resolveSink(spec: SinkSpec): Sink {
     });
   }
   throw new UnknownSinkError(String(kind));
+}
+
+function resolveNativeSink(spec: NativeSinkSpec): Sink {
+  switch (spec.kind) {
+    case "elasticsearch":
+      return new ElasticsearchSink(spec.options);
+    case "logstash":
+      return new LogstashSink(spec.options);
+    case "loki":
+      return new LokiSink(spec.options);
+    case "datadog":
+      return new DatadogSink(spec.options);
+    case "otlp":
+      return new OtlpSink(spec.options);
+    case "syslog":
+      return new SyslogSink(spec.options);
+    case "gelf":
+      return new GelfSink(spec.options);
+    case "splunk":
+      return new SplunkSink(spec.options);
+    default:
+      throw new UnknownSinkError(String((spec as { kind: unknown }).kind));
+  }
 }
 
 export class LoggerKitFactoryError extends Error {
