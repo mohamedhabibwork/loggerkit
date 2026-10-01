@@ -19,6 +19,23 @@ const entries = [
   "src/adapters/morgan.ts",
   "src/adapters/roarr.ts",
   "src/testing.ts",
+  "src/processors.ts",
+  "src/context.ts",
+  "src/sinks/elasticsearch.ts",
+  "src/sinks/logstash.ts",
+  "src/sinks/loki.ts",
+  "src/sinks/datadog.ts",
+  "src/sinks/otlp.ts",
+  "src/sinks/syslog.ts",
+  "src/sinks/gelf.ts",
+  "src/sinks/splunk.ts",
+  "src/adapters/pino.ts",
+  "src/adapters/consola.ts",
+  "src/adapters/debug.ts",
+  "src/adapters/express.ts",
+  "src/adapters/fastify.ts",
+  "src/adapters/nestjs.ts",
+  "src/adapters/console.ts",
 ];
 
 export default defineConfig({
